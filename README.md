@@ -16,7 +16,7 @@ The easiest way to get running is to head to Releases and download the package f
 ### For reference:
 
 MacOS Intel (x64): PlayfulPy-darwin-x64-[version].zip  
-MacOS Apple Silicon (arm64): PlayfulPy-darwin-arm64-[version].zip  
+MacOS Apple Silicon (arm64): PlayfulPy-darwin-arm64-[version].zip  (ARM no longer supported since I do not longer own an ARM equipped Mac. You can build your own distributable though using the instructions provided)
 
 ## Installing from source
 
