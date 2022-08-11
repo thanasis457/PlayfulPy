@@ -57,17 +57,22 @@ class AwesomeStatusBarApp(rumps.App):
         except:
             self.length = 'Short'
         def refresh_title():
-            try:
-                track = getCurrentTrack()
-                # print(track)
-                # print(" and ")
-                # print(self.current_song)
-                if(track[0]!=self.current_song[0] or track[1]!=self.current_song[1]):
-                    # print("copying")
-                    self.current_song=track.copy()
-                    self.title = formatTitle(track[0], track[1], self.length)
-            except:
-                pass
+            if(isRunning() == 'running'):
+                try:
+                    track = getCurrentTrack()
+                    # print(track)
+                    # print(" and ")
+                    # print(self.current_song)
+                    if(track[0]!=self.current_song[0] or track[1]!=self.current_song[1]):
+                        # print("copying")
+                        self.current_song=track.copy()
+                        self.title = formatTitle(track[0], track[1], self.length)
+                except:
+                    self.current_song = ['', '']
+                    self.title = "Error"
+            else:
+                self.current_song = ['', '']
+                self.title = "Open Spotify"
             threading.Timer(4.0, refresh_title).start()
         refresh_title()
 

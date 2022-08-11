@@ -29,3 +29,12 @@ def getCurrentTrack():
     )
     info = list(map(str.strip, result.stdout.split(",")))
     return info
+
+def isRunning():
+    result = subprocess.run(
+        ["osascript", 'compiledFunctions/running.scpt'],
+        capture_output=True,
+        encoding="utf-8",
+    )
+    info = list(map(str.strip, result.stdout.split(",")))
+    return info[0]
