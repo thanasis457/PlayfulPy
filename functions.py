@@ -1,45 +1,20 @@
 import subprocess
 
 def play():
-    scpt = """
-    tell application "Spotify"
-        play
-    end tell
-    """
-    subprocess.run(["osascript", "-e", scpt])
+    subprocess.run(["osascript", 'compiledFunctions/play.scpt'])
 
 def pause():
-    scpt = """
-    tell application "Spotify"
-        pause
-    end tell
-    """
-    subprocess.run(["osascript", "-e", scpt])
+    subprocess.run(["osascript", 'compiledFunctions/pause.scpt'])
     
 def next():
-    scpt = """
-    tell application "Spotify"
-        next track
-    end tell
-    """
-    subprocess.run(["osascript", "-e", scpt])
+    subprocess.run(["osascript", 'compiledFunctions/next.scpt'])
     
 def previous():
-    scpt = """
-    tell application "Spotify"
-        previous track
-    end tell
-    """
-    subprocess.run(["osascript", "-e", scpt])
+    subprocess.run(["osascript", 'compiledFunctions/previous.scpt'])
 
 def getState():
-    scpt = """
-    tell application "Spotify"
-        player state
-    end tell
-    """
     result = subprocess.run(
-        ["osascript", "-e", scpt],
+        ["osascript",'compiledFunctions/state.scpt'],
         capture_output=True,
         encoding="utf-8",
     )
@@ -47,18 +22,8 @@ def getState():
     return info[0]
 
 def getCurrentTrack():
-    scpt = """
-    getCurrentlyPlayingTrack()
-    on getCurrentlyPlayingTrack()
-        tell application "Spotify"
-            set currentSong to current track's name
-            set currentArtist to current track's artist
-            return {currentSong, currentArtist}
-        end tell
-    end getCurrentlyPlayingTrack
-    """
     result = subprocess.run(
-        ["osascript", "-e", scpt],
+        ["osascript", 'compiledFunctions/currentTrack.scpt'],
         capture_output=True,
         encoding="utf-8",
     )
