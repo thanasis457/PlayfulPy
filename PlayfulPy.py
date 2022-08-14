@@ -126,7 +126,11 @@ def getCode():
     p = Process(target=Server, args = (q,))
     try:
         p.start()
+        cnt=0
         while(True):
+            cnt+=1
+            if(cnt>11):
+                raise TimeoutError()
             try:
                 r = requests.get(redirect_uri+'health')
                 r.raise_for_status()  # Raises a HTTPError if the status is 4xx, 5xxx
