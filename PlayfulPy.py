@@ -22,7 +22,6 @@ server_instance = None
 code=None
 spot_instance = None
 auth_instance = None
-timer = None
 access_token = None
 timer_thread = None
 
@@ -74,6 +73,7 @@ def Server(q):
         app.run(host='localhost', port=config['PlayfulPy']['uri_port'])
 
 def getAccessToken():
+    # print("Getting access token")
     res = requests.post("https://accounts.spotify.com/api/token", headers={
         "Content-Type": "application/x-www-form-urlencoded",
         "Authorization":
@@ -91,10 +91,19 @@ def getAccessToken():
     global timer        
     access_token=res['access_token']
     refresh_token=res['refresh_token']
-
-    timer=res['expires_in']
+    global timer_thread
+    timer_thread = threading.Timer(res['expires_in'], getRefreshToken)
+    timer_thread.start()
 
 def getRefreshToken():
+    # print("Getting refresh token")
+    global timer_thread
+    if(timer_thread != None):
+        try:
+            timer_thread.cancel()
+            # print("Cancelled thread")
+        except Exception as e:
+            print(e)
     res = requests.post("https://accounts.spotify.com/api/token", headers={
         "Content-Type": "application/x-www-form-urlencoded",
         "Authorization":
@@ -109,16 +118,14 @@ def getRefreshToken():
     global access_token
     global timer
     access_token=res['access_token']
-    timer=res['expires_in']
+    timer_thread = threading.Timer(res['expires_in'], getRefreshToken)
+    timer_thread.start()
 
 def getCode():
     q = Queue()
     p = Process(target=Server, args = (q,))
     try:
         p.start()
-        print('Trying')
-        # print(requests.get(redirect_uri).status_code)
-        print('Tried')
         while(True):
             try:
                 r = requests.get(redirect_uri+'health')
@@ -149,12 +156,13 @@ def handleSignIn():
         else:
             try:
                 getRefreshToken()
-            except:
+            except Exception as e:
+                print(e)
                 print("handling server")
                 getCode()
                 getAccessToken()
         PlayfulPy.source = 'connect'
-        global timer_thread
+        # global timer_thread
         # timer_thread = threading.Thread(timer, target=getRefreshToken)
         # timer_thread.start()
     except Exception as e:
