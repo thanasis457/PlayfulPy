@@ -1,9 +1,10 @@
+from sre_parse import State
 from time import sleep
 import rumps
 import threading
+from multiprocessing import Process, Queue
 from functions import *
 import configparser
-from multiprocessing import Process
 from flask import Flask, request
 import webbrowser
 import requests
@@ -23,13 +24,14 @@ spot_instance = None
 auth_instance = None
 timer = None
 access_token = None
+timer_thread = None
 
 scope = [
     "user-read-currently-playing",
     "user-read-playback-state",
     "user-modify-playback-state",
 ];
-
+    
 def formatTitle(song, artist, length):
     if(length=='Long'):    
         song_edited=song
@@ -56,31 +58,19 @@ def formatTitle(song, artist, length):
                 song_edited = song[0:(26-len(artist)-2)]+'..'
         return song_edited + " - " + artist_edited
 
-def Server():
+def Server(q):
         app = Flask("MyServer")
-        webbrowser.open(('''https://accounts.spotify.com/authorize?client_id={client_id}&redirect_uri={redirect_uri}&response_type=code&scope={scope}''').format(client_id=client_id, redirect_uri=redirect_uri, scope=",".join(scope)))
         
-        @app.before_first_request
-        def before_first_request():
-            print("Opened window")
+        @app.route("/health")
+        def checkHealth():
+            return "<p>Everything is running</p>"
         
-        def shutdown_server():
-            func = request.environ.get('werkzeug.server.shutdown')
-            if func is None:
-                raise RuntimeError('Not running with the Werkzeug Server')
-            func()
-
-        @app.after_request
-        def after_request(res):
-            shutdown_server()
-            return res
-
         @app.route("/")
         def getCode():
             global code
             code = request.args['code']
-            print(request.args['code'])
-            return "<p>Hello, code: !</p> " + request.args['code']
+            q.put(code)
+            return "<p>Everything is set up! You can now close your window.</p>"
         app.run(host='localhost', port=config['PlayfulPy']['uri_port'])
 
 def getAccessToken():
@@ -103,6 +93,7 @@ def getAccessToken():
     refresh_token=res['refresh_token']
 
     timer=res['expires_in']
+
 def getRefreshToken():
     res = requests.post("https://accounts.spotify.com/api/token", headers={
         "Content-Type": "application/x-www-form-urlencoded",
@@ -120,30 +111,63 @@ def getRefreshToken():
     access_token=res['access_token']
     timer=res['expires_in']
 
+def getCode():
+    q = Queue()
+    p = Process(target=Server, args = (q,))
+    try:
+        p.start()
+        print('Trying')
+        # print(requests.get(redirect_uri).status_code)
+        print('Tried')
+        while(True):
+            try:
+                r = requests.get(redirect_uri+'health')
+                r.raise_for_status()  # Raises a HTTPError if the status is 4xx, 5xxx
+            except (requests.exceptions.ConnectionError, requests.exceptions.Timeout):
+                print("Down")
+                sleep(0.5)
+            except requests.exceptions.HTTPError:
+                print("4xx, 5xx")
+                sleep(0.5)
+            else:
+                break
+        webbrowser.open(('''https://accounts.spotify.com/authorize?client_id={client_id}&redirect_uri={redirect_uri}&response_type=code&scope={scope}''').format(client_id=client_id, redirect_uri=redirect_uri, scope=",".join(scope)))
+        
+        global code
+        code = q.get(block=True)
+        p.terminate()
+    except Exception as e:
+        p.terminate()
+        raise e
+
 def handleSignIn():
     try:
         if(refresh_token==None):
             print("handling server")
-            Server()
+            getCode()
             getAccessToken()
         else:
             try:
                 getRefreshToken()
             except:
                 print("handling server")
-                Server()
+                getCode()
                 getAccessToken()
         PlayfulPy.source = 'connect'
-        
+        global timer_thread
+        # timer_thread = threading.Thread(timer, target=getRefreshToken)
+        # timer_thread.start()
     except Exception as e:
         print('Error while signing in')
         print(e)
+        raise e
 
 class PlayfulPy(rumps.App):
     length = 'Short'
     current_song=["",""]
     send_notification = False
     source = 'spotify'  # spotify | connect
+
     def __init__(self):
         super(PlayfulPy, self).__init__(
             name="Playful",
@@ -159,8 +183,7 @@ class PlayfulPy(rumps.App):
                         'Text Length':['Short', 'Long'],
                         'Source': ['Spotify App', 'Spotify Connect (Experimental)'],
                         'Send Notification On Change' : ['On', 'Off']
-                    },
-                    ]
+                    }]
                 }
             ],
             quit_button=None
@@ -169,70 +192,68 @@ class PlayfulPy(rumps.App):
         try:
             if('send_notification' in config['PlayfulPy']):
                 PlayfulPy.send_notification = config['PlayfulPy']['send_notification']=='True'
+                self.menu.get('Options').get('Send Notification On Change').get('On' if (PlayfulPy.send_notification == True) else 'Off').state = 1
+            else:
+                self.menu.get('Options').get('Send Notification On Change').get('Off').state = 1
             if('length' in config['PlayfulPy']):
                 PlayfulPy.length = config['PlayfulPy']['length']
+                self.menu.get('Options').get('Text Length').get('Short' if (PlayfulPy.length == 'Short') else 'Long').state = 1
+            else:
+                self.menu.get('Options').get('Text Length').get('Short').state = 1
             if('source' in config['PlayfulPy']):
                 PlayfulPy.source = config['PlayfulPy']['source']
+                if(PlayfulPy.source=='connect'):
+                    # Same as self.spotify_connect()
+                    try:
+                        handleSignIn()
+                        self.icon='icons/spotify_connect.png'
+                        self.menu.get('Options').get('Source').get('Spotify Connect (Experimental)').state = 1
+                    except:
+                        PlayfulPy.source = 'spotify'
+                        self.menu.get('Options').get('Source').get('Spotify App').state = 1
+                else:
+                    self.menu.get('Options').get('Source').get('Spotify App').state = 1
         except:
             pass
-        def refresh_title():
-            # print(PlayfulPy.source)
-            # print(PlayfulPy.current_song)
-            if(PlayfulPy.source=='spotify'):
-                if(isRunning() == 'running'):
-                    try:
-                        track = getCurrentTrack()
-                        # print(track)
-                        # print(" and ")
-                        # print(self.current_song)
-                        if(track[0]!=PlayfulPy.current_song[0] or track[1]!=PlayfulPy.current_song[1]):
-                            # print("copying"x)
-                            if(PlayfulPy.send_notification==True):
-                                PlayfulPy.send_notification and rumps.notification(title=track[0], message=track[1], subtitle="")
-                            PlayfulPy.current_song=track.copy()
-                            self.title = formatTitle(track[0], track[1], PlayfulPy.length)
-                            
-                    except:
-                        PlayfulPy.current_song = ['', '']
-                        self.title = "Error"
-                else:
-                    PlayfulPy.current_song = ['', '']
-                    self.title = "Open Spotify"
-            else:
+    
+    @rumps.timer(2)
+    def refresh_title(self, _):
+        # print(PlayfulPy.source)
+        # print(PlayfulPy.current_song)
+        if(PlayfulPy.source=='spotify'):
+            if(isRunning() == 'running'):
                 try:
-                    track = getCurrentTrack(access_token)
+                    track = getCurrentTrack()
                     # print(track)
                     # print(" and ")
                     # print(self.current_song)
                     if(track[0]!=PlayfulPy.current_song[0] or track[1]!=PlayfulPy.current_song[1]):
-                        # print("copying")
+                        # print("copying"x)
                         if(PlayfulPy.send_notification==True):
-                            rumps.notification(title=track[0], message=track[1], subtitle="")
+                            rumps.notification(title=track[0], message=track[1], subtitle="", sound = False)
                         PlayfulPy.current_song=track.copy()
                         self.title = formatTitle(track[0], track[1], PlayfulPy.length)
+                        
                 except Exception as e:
-                    self.current_song = ['', '']
-                    self.title = "Could Not Get Song"
-                    print(e)
-            threading.Timer(2.0, refresh_title).start()
-        refresh_title()
-        
-    @rumps.clicked("Options", "Source", "Spotify Connect (Experimental)")
-    def spotify_app(self, _):
-        x = threading.Thread(target=handleSignIn)
-        x.start()
-    
-    @rumps.clicked("Options", "Source", "Spotify App")
-    def spotify_connect(self, _):
-        PlayfulPy.source="spotify"
-        
-    @rumps.clicked("Options", "Send Notification On Change", "On")
-    def send_notification_on(self, _):
-        PlayfulPy.send_notification = True
-    
-    @rumps.clicked("Options", "Send Notification On Change", "Off")
-    def send_notification_off(self, _):
-        PlayfulPy.send_notification = False
+                    PlayfulPy.current_song = ['', '']
+                    self.title = "Error"
+                    # print(e)
+            else:
+                PlayfulPy.current_song = ['', '']
+                self.title = "Open Spotify"
+        else:
+            try:
+                track = getCurrentTrack(access_token)
+                if(track[0]!=PlayfulPy.current_song[0] or track[1]!=PlayfulPy.current_song[1]):
+                    if(PlayfulPy.send_notification==True):
+                        rumps.notification(title=track[0], message=track[1], subtitle="", sound = False)
+                    PlayfulPy.current_song=track.copy()
+                    self.title = formatTitle(track[0], track[1], PlayfulPy.length)
+
+            except Exception as e:
+                PlayfulPy.current_song = ['', '']
+                self.title = "Error"
+                print(e)
 
     @rumps.clicked("Play / Pause")
     def toggle(self, _):
@@ -262,18 +283,52 @@ class PlayfulPy(rumps.App):
         else:
             previous(access_token)
         self.refresh_title_once()
-    
-    
+
     @rumps.clicked("Options", "Text Length", 'Short')
-    def format_length_short(self, _):
+    def format_length_short(self, sender):
         PlayfulPy.length='Short'
+        sender.state = 1
+        self.menu.get('Options').get('Text Length').get('Long').state = 0
         self.refresh_title_once()
-    
+
     @rumps.clicked("Options", "Text Length", 'Long')
-    def format_length_long(self, _):
+    def format_length_long(self, sender):
         PlayfulPy.length='Long'
+        sender.state = 1
+        self.menu.get('Options').get('Text Length').get('Short').state = 0
         self.refresh_title_once()
+
+    @rumps.clicked("Options", "Source", "Spotify App")
+    def spotify_app(self, sender):
+        PlayfulPy.source="spotify"
+        self.icon='icons/spotify.png'
+        sender.state = 1
+        self.menu.get('Options').get('Source').get('Spotify Connect (Experimental)').state = 0
+
+    @rumps.clicked("Options", "Source", "Spotify Connect (Experimental)")
+    def spotify_connect(self, sender):
+        try:
+            handleSignIn()
+            self.icon='icons/spotify_connect.png'
+            sender.state = 1
+            self.menu.get('Options').get('Source').get('Spotify App').state = 0
+        except:
+            PlayfulPy.source = 'spotify'
+            sender.state = 0
+            self.menu.get('Options').get('Source').get('Spotify App').state = 1
     
+    @rumps.clicked("Options", "Send Notification On Change", "On")
+    def send_notification_on(self, sender):
+        PlayfulPy.send_notification = True
+        sender.state = 1
+        self.menu.get('Options').get('Send Notification On Change').get('Off').state = 0
+    
+    @rumps.clicked("Options", "Send Notification On Change", "Off")
+    def send_notification_off(self, sender):
+        PlayfulPy.send_notification = False
+        sender.state = 1
+        self.menu.get('Options').get('Send Notification On Change').get('On').state = 0
+
     @rumps.clicked('Quit')
     def save_on_quit(self, _):
         config['PlayfulPy']['length'] = PlayfulPy.length

@@ -8,7 +8,7 @@ Usage:
 from setuptools import setup
 
 APP = ['PlayfulPy.py']
-DATA_FILES = ['icons', 'compiledFunctions']
+DATA_FILES = ['icons', 'compiledFunctions', 'PlayfulPy.ini']
 OPTIONS = {
     'iconfile':'icons/app.icns',
     'plist': {
