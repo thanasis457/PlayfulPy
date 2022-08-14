@@ -2,8 +2,7 @@
 
 A simple, clean, MacOS application that displays the current song on the Menu Bar. Works only with Spotify.    
 
-
-This project is a complete rewrite of [Playful](https://github.com/thanasis457/Playful) with a focus on efficiency and low resource use, written in Python.
+<b>! Update: </b>This project is now archived. It should, however, still work as intended. Playful-Py was initially started as an alternative to [Playful](https://github.com/thanasis457/Playful) with a focus on efficiency and low resource use, but now all of its code and functionality has been fully integrated into the original project. Go check out the original [Playful](https://github.com/thanasis457/Playful) for the most up-to-date app.
 
 ## Screenshots
 ![](https://i.imgur.com/ZmtXkHh.png)
