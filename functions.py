@@ -82,7 +82,10 @@ def getCurrentTrack(access_token=None):
             headers= {
                 "Authorization": "Bearer " + access_token,
             }
-        ).json()
+        )
+        if(res.status_code == 204):
+            return ['No Song Playing', '']
+        res=res.json()
         return [res['item']['name'], res['item']['artists'][0]['name']]
 
 def isRunning():
